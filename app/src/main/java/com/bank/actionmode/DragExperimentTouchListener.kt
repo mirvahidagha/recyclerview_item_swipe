@@ -1,138 +1,113 @@
-package com.bank.actionmode;
+package com.bank.actionmode
 
-import android.animation.ObjectAnimator;
-import android.content.res.Resources;
-import android.util.DisplayMetrics;
-import android.util.Log;
-import android.util.TypedValue;
-import android.view.MotionEvent;
-import android.view.View;
-import android.view.animation.BounceInterpolator;
+import android.animation.ObjectAnimator
+import android.animation.ValueAnimator
+import android.annotation.SuppressLint
+import android.util.Log
+import android.util.TypedValue
+import android.view.MotionEvent
+import android.view.View
+import android.view.View.OnTouchListener
+import android.view.animation.BounceInterpolator
+import kotlin.math.abs
 
-public class DragExperimentTouchListener implements View.OnTouchListener {
+class DragExperimentTouchListener(private var lastX: Float, view: View?, main: View?) :
+    OnTouchListener {
+    private var dragDistance = 0f
+    private var isOpen = false
+    private var view: View? = null
+    private var main: View? = null
+    private var isDragging = false
+    private var deltaX = 0f
 
-    private float dragDistance;
-    boolean isOpen = false;
-
-    public DragExperimentTouchListener(float initalX, float initialY, View view, View main) {
-        lastX = initalX;
-        lastY = initialY;
-        this.view = view;
-        this.main = main;
+    init {
+        this.view = view
+        this.main = main
     }
 
-    View view = null;
-    View main = null;
-    boolean isDragging = false;
-    float lastX;
-    float lastY;
-    float deltaX;
-    float deltaY;
-
-    @Override
-    public boolean onTouch(View view, MotionEvent event) {
-        int action = event.getAction();
+    @SuppressLint("ClickableViewAccessibility")
+    override fun onTouch(view: View, event: MotionEvent): Boolean {
+        val action = event.action
         if (action == MotionEvent.ACTION_DOWN && !isDragging) {
-            isDragging = true;
-            if (isOpen) deltaX = event.getX()-dpToPx(80);
-             else deltaX = event.getX();
-            return false;
+            isDragging = true
+            deltaX = if (isOpen) event.x - dpToPx(80f) else event.x
+            return false
         } else if (isDragging) {
-            if (action == MotionEvent.ACTION_MOVE) {
-                dragDistance = deltaX- event.getX();
-                Log.d("distance", dragDistance+"");
-                if (dragDistance <= dpToPx(80f) && dragDistance > 0) {
-                    this.view.setTranslationX(-dragDistance);
-                    main.setTranslationX((-dragDistance / 2) - (dpToPx(-40)));
+            when (action) {
+                MotionEvent.ACTION_MOVE -> {
+                    this.dragDistance = deltaX - event.x
+
+                    if(!isOpen)
+                    if (dragDistance <= dpToPx(80f) && dragDistance > 0) {
+                        this.view!!.translationX = -dragDistance
+                        main!!.translationX = -dragDistance / 2 - dpToPx(-40f)
+
+                    }
+
+                    if (isOpen) {
+                        dragDistance += dpToPx(80f)
+                        Log.d("distance here", "$dragDistance")
+                        if (dragDistance >= dpToPx(-80f) && dragDistance < 0) {
+                            main!!.resources.displayMetrics.widthPixels - dpToPx(-80f)
+                            this.view!!.translationX = dpToPx(-80f) - dragDistance
+                            main!!.translationX = (dpToPx(-80f) - dragDistance) / 2 - dpToPx(-40f)
+                        }
+                    }
+
+                    return false
                 }
-
-                if (dragDistance >= dpToPx(-80f) && dragDistance < 0) {
-
-                    int width = main.getResources().getDisplayMetrics().widthPixels;
-
-                    this.view.setTranslationX(-(width-dragDistance));
-                  //  main.setTranslationX((-(width-dragDistance) / 2) - (dpToPx(-40)));
+                MotionEvent.ACTION_UP -> {
+                    isDragging = false
+                    lastX = event.x
+                    dragDistance = deltaX - lastX
+                    if (dragDistance > 0 && abs(dragDistance) > dpToPx(40f)) open() else if (!isOpen) close()
+                    if (dragDistance <= 0 && abs(dragDistance) > dpToPx(40f)) close() else if (isOpen) open()
+                    return false
                 }
-
-
-                return false;
-            } else if (action == MotionEvent.ACTION_UP) {
-                isDragging = false;
-                lastX = event.getX();
-                dragDistance = deltaX-lastX;
-
-                if (dragDistance>0 && Math.abs(dragDistance) > dpToPx(60))
-                    open();
-                else
-                   if (!isOpen) close();
-
-                if (dragDistance<=0 && Math.abs(dragDistance) > dpToPx(30))
-                    close();
-                else
-                   if (isOpen) open();
-
-                return false;
-            } else if (action == MotionEvent.ACTION_CANCEL) {
-
-
-
-                dragDistance = deltaX-lastX;
-                if (dragDistance>0 && Math.abs(dragDistance) > dpToPx(60))
-                    open();
-                else
-                if (!isOpen)  close();
-
-                if (dragDistance<=0 && Math.abs(dragDistance) > dpToPx(30))
-                    close();
-                else
-                if (isOpen)  open();
-
-                lastX = event.getX();
-                isDragging = false;
-                return true;
+                MotionEvent.ACTION_CANCEL -> {
+                    dragDistance = deltaX - lastX
+                    if (dragDistance > 0 && abs(dragDistance) > dpToPx(40f)) open() else if (!isOpen) close()
+                    if (dragDistance <= 0 && abs(dragDistance) > dpToPx(40f)) close() else if (isOpen) open()
+                    lastX = event.x
+                    isDragging = false
+                    return true
+                }
             }
         }
-
-        return false;
+        return false
     }
 
-    void open() {
-        float x = -dpToPx(80);
-        ObjectAnimator animator = ObjectAnimator.ofFloat(view, "translationX", x);
-        animator.setDuration(700);
-        animator.addUpdateListener(animation -> {
-                    view.setTranslationX(((Float) (animation.getAnimatedValue())));
-                    main.setTranslationX(((Float) (animation.getAnimatedValue()) / 2) + dpToPx(40f));
-                }
-        );
-        animator.setInterpolator(new BounceInterpolator());
-        animator.start();
-        isOpen = true;
+    @SuppressLint("ObjectAnimatorBinding")
+    fun open() {
+        val x = -dpToPx(80f)
+        val animator = ObjectAnimator.ofFloat(view, "translationX", x)
+        animator.duration = 700
+        animator.addUpdateListener { animation: ValueAnimator ->
+            view!!.translationX = (animation.animatedValue as Float)
+            main!!.translationX = animation.animatedValue as Float / 2 + dpToPx(40f)
+        }
+        animator.interpolator = BounceInterpolator()
+        animator.start()
+        isOpen = true
     }
 
-    void close() {
-        float x = 0f;
-        ObjectAnimator animator = ObjectAnimator.ofFloat(view, "translationX", x);
-        animator.setDuration(700);
-        animator.addUpdateListener(animation -> {
-                    view.setTranslationX(((Float) (animation.getAnimatedValue())));
-                    main.setTranslationX(((Float) (animation.getAnimatedValue()) / 2) + dpToPx(40f));
-                }
-        );
-        animator.setInterpolator(new BounceInterpolator());
-        animator.start();
-
-        isOpen = false;
+    @SuppressLint("ObjectAnimatorBinding")
+    fun close() {
+        val x = 0f
+        val animator = ObjectAnimator.ofFloat(view, "translationX", x)
+        animator.duration = 700
+        animator.addUpdateListener { animation: ValueAnimator ->
+            view!!.translationX = (animation.animatedValue as Float)
+            main!!.translationX = animation.animatedValue as Float / 2 + dpToPx(40f)
+        }
+        animator.interpolator = BounceInterpolator()
+        animator.start()
+        isOpen = false
     }
 
-    float dpToPx(float d) {
-        Resources r = main.getResources();
-        return TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, d, r.getDisplayMetrics());
-    }
-
-    float pxToDp(float p) {
-
-        return p / ((float) main.getResources().getDisplayMetrics().densityDpi / DisplayMetrics.DENSITY_DEFAULT);
+    private fun dpToPx(d: Float): Float {
+        val r = main!!.resources
+        return TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, d, r.displayMetrics)
     }
 
 }

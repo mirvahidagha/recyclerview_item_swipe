@@ -1,15 +1,11 @@
 package com.bank.actionmode
 
-import android.animation.ObjectAnimator
 import android.content.res.Resources
 import android.os.Bundle
 import android.util.TypedValue
 import android.view.LayoutInflater
-import android.view.MotionEvent
-import android.view.animation.BounceInterpolator
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
-import androidx.recyclerview.widget.RecyclerView
 import com.bank.actionmode.databinding.ActivityMainBinding
 import com.bank.actionmode.databinding.RecyclerItemBinding
 import com.google.android.material.snackbar.Snackbar
@@ -38,7 +34,11 @@ class MainActivity : AppCompatActivity() {
                 snackbar.show()
             }
             1.dp
-            view.root.setOnTouchListener(DragExperimentTouchListener(view.textview.pivotX, view.textview.pivotY, view.textview, view.main))
+            view.root.setOnTouchListener(DragExperimentTouchListener(
+                view.textview.pivotX,
+                view.textview,
+                view.main
+            ))
 
 //            view.root.setOnTouchListener(object : OnSwipeTouchListener(this) {
 //
