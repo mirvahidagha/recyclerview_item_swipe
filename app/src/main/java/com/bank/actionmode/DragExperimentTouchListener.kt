@@ -8,17 +8,26 @@ import android.util.TypedValue
 import android.view.MotionEvent
 import android.view.View
 import android.view.View.OnTouchListener
-import android.view.animation.BounceInterpolator
+import android.view.ViewParent
+import android.view.animation.AccelerateDecelerateInterpolator
+import android.view.animation.AccelerateInterpolator
 import kotlin.math.abs
+import kotlin.math.atan2
+import kotlin.math.roundToLong
 
-class DragExperimentTouchListener(private var lastX: Float, view: View?, main: View?) :
+class DragExperimentTouchListener(var parent: ViewParent, private var lastX: Float, view: View?, main: View?) :
     OnTouchListener {
-    private var dragDistance = 0f
+    private var dragDistanceX = 0f
+    private var dragDistanceY = 0f
     private var isOpen = false
     private var view: View? = null
     private var main: View? = null
     private var isDragging = false
     private var deltaX = 0f
+    private var deltaY = 0f
+    private var ratio = 0f
+
+    private var dontPass = true
 
     init {
         this.view = view
@@ -29,45 +38,56 @@ class DragExperimentTouchListener(private var lastX: Float, view: View?, main: V
     override fun onTouch(view: View, event: MotionEvent): Boolean {
         val action = event.action
         if (action == MotionEvent.ACTION_DOWN && !isDragging) {
+            parent.requestDisallowInterceptTouchEvent(false)
             isDragging = true
             deltaX = if (isOpen) event.x - dpToPx(80f) else event.x
+            deltaY = if (isOpen) event.y - dpToPx(80f) else event.y
             return false
         } else if (isDragging) {
             when (action) {
                 MotionEvent.ACTION_MOVE -> {
-                    this.dragDistance = deltaX - event.x
+                    this.dragDistanceX = deltaX - event.x
+                    this.dragDistanceY = deltaY - event.y
 
-                    if(!isOpen)
-                    if (dragDistance <= dpToPx(80f) && dragDistance > 0) {
-                        this.view!!.translationX = -dragDistance
-                        main!!.translationX = -dragDistance / 2 - dpToPx(-40f)
-
+                    //todo
+                    if (abs(Math.toDegrees(atan2(dragDistanceY, dragDistanceX).toDouble())) !in 80f..100f) {
+                        parent.requestDisallowInterceptTouchEvent(true)
                     }
 
+                    if (!isOpen)
+                        if (dragDistanceX <= dpToPx(80f) && dragDistanceX > 0) {
+                            this.view!!.translationX = -dragDistanceX
+                            main!!.translationX = -dragDistanceX / 2 - dpToPx(-40f)
+                            //todo
+                            ratio = abs(dragDistanceX / dpToPx(80f))
+                        }
+
                     if (isOpen) {
-                        dragDistance += dpToPx(80f)
-                        Log.d("distance here", "$dragDistance")
-                        if (dragDistance >= dpToPx(-80f) && dragDistance < 0) {
-                            main!!.resources.displayMetrics.widthPixels - dpToPx(-80f)
-                            this.view!!.translationX = dpToPx(-80f) - dragDistance
-                            main!!.translationX = (dpToPx(-80f) - dragDistance) / 2 - dpToPx(-40f)
+                        dragDistanceX += dpToPx(80f)
+                        if (dragDistanceX >= dpToPx(-80f) && dragDistanceX < 0) {
+                            this.view!!.translationX = dpToPx(-80f) - dragDistanceX
+                            main!!.translationX = (dpToPx(-80f) - dragDistanceX) / 2 - dpToPx(-40f)
+                            //todo
+                            ratio = abs((dpToPx(-80f) - dragDistanceX) / dpToPx(80f))
                         }
                     }
 
                     return false
                 }
                 MotionEvent.ACTION_UP -> {
+                    dontPass = true
                     isDragging = false
                     lastX = event.x
-                    dragDistance = deltaX - lastX
-                    if (dragDistance > 0 && abs(dragDistance) > dpToPx(40f)) open() else if (!isOpen) close()
-                    if (dragDistance <= 0 && abs(dragDistance) > dpToPx(40f)) close() else if (isOpen) open()
+                    dragDistanceX = deltaX - lastX
+                    if (dragDistanceX > 0 && abs(dragDistanceX) > dpToPx(60f)) open() else if (!isOpen) close()
+                    if (dragDistanceX <= 0 && abs(dragDistanceX) > dpToPx(60f)) close() else if (isOpen) open()
                     return false
                 }
                 MotionEvent.ACTION_CANCEL -> {
-                    dragDistance = deltaX - lastX
-                    if (dragDistance > 0 && abs(dragDistance) > dpToPx(40f)) open() else if (!isOpen) close()
-                    if (dragDistance <= 0 && abs(dragDistance) > dpToPx(40f)) close() else if (isOpen) open()
+                    dontPass = true
+                    dragDistanceX = deltaX - lastX
+                    if (dragDistanceX > 0 && abs(dragDistanceX) > dpToPx(60f)) open() else if (!isOpen) close()
+                    if (dragDistanceX <= 0 && abs(dragDistanceX) > dpToPx(60f)) close() else if (isOpen) open()
                     lastX = event.x
                     isDragging = false
                     return true
@@ -79,28 +99,32 @@ class DragExperimentTouchListener(private var lastX: Float, view: View?, main: V
 
     @SuppressLint("ObjectAnimatorBinding")
     fun open() {
+        Log.d("note ratio", "open: $ratio")
         val x = -dpToPx(80f)
         val animator = ObjectAnimator.ofFloat(view, "translationX", x)
-        animator.duration = 700
+        //todo
+        animator.duration = (400*ratio).roundToLong()
         animator.addUpdateListener { animation: ValueAnimator ->
             view!!.translationX = (animation.animatedValue as Float)
             main!!.translationX = animation.animatedValue as Float / 2 + dpToPx(40f)
         }
-        animator.interpolator = BounceInterpolator()
+        animator.interpolator = AccelerateDecelerateInterpolator()
         animator.start()
         isOpen = true
     }
 
     @SuppressLint("ObjectAnimatorBinding")
     fun close() {
+        Log.d("note ratio", "close: $ratio")
         val x = 0f
         val animator = ObjectAnimator.ofFloat(view, "translationX", x)
-        animator.duration = 700
+        //todo
+        animator.duration = (400*ratio).roundToLong()
         animator.addUpdateListener { animation: ValueAnimator ->
             view!!.translationX = (animation.animatedValue as Float)
             main!!.translationX = animation.animatedValue as Float / 2 + dpToPx(40f)
         }
-        animator.interpolator = BounceInterpolator()
+        animator.interpolator = AccelerateDecelerateInterpolator()
         animator.start()
         isOpen = false
     }
