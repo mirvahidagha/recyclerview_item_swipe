@@ -1,244 +1,202 @@
 package com.bank.actionmode
 
-import android.animation.Animator
-import android.animation.AnimatorListenerAdapter
-import android.animation.ObjectAnimator
-import android.animation.ValueAnimator
-import android.annotation.SuppressLint
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
-import android.os.Handler
-import android.view.LayoutInflater
-import android.view.animation.*
-import android.widget.TextView
+import android.util.DisplayMetrics
+import android.util.Log
+import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
-import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.camera.core.*
+import androidx.camera.lifecycle.ProcessCameraProvider
+import androidx.camera.video.Recorder
+import androidx.camera.video.Recording
+import androidx.camera.video.VideoCapture
+import androidx.core.content.ContextCompat
 import com.bank.actionmode.databinding.ActivityMainBinding
-import com.bank.actionmode.databinding.RecyclerItemBinding
-import com.google.android.material.snackbar.Snackbar
+import com.bank.actionmode.util.ScopedExecutor
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
+import kotlin.math.abs
+import kotlin.math.ln
+import kotlin.math.max
+import kotlin.math.min
 
+typealias LumaListener = (luma: Double) -> Unit
 
 class MainActivity : AppCompatActivity() {
+    private lateinit var viewBinding: ActivityMainBinding
+    private val viewModel: MainViewModel by viewModels()
+    private var imageAnalyzer: ImageAnalysis? = null
+    private val activityResultLauncher =
+        registerForActivityResult(
+            ActivityResultContracts.RequestMultiplePermissions()
+        )
+        { permissions ->
+            // Handle Permission granted/rejected
+            var permissionGranted = true
+            permissions.entries.forEach {
+                if (it.key in REQUIRED_PERMISSIONS && it.value == false)
+                    permissionGranted = false
+            }
+            if (!permissionGranted) {
+                Toast.makeText(
+                    baseContext,
+                    "Permission request denied",
+                    Toast.LENGTH_SHORT
+                ).show()
+            } else {
+                startCamera()
+            }
+        }
 
-    private lateinit var binding: ActivityMainBinding
+    private var imageCapture: ImageCapture? = null
 
-    @SuppressLint("ClickableViewAccessibility")
+    private var videoCapture: VideoCapture<Recorder>? = null
+    private var recording: Recording? = null
+
+    private lateinit var cameraExecutor: ExecutorService
+
+    private lateinit var scopedExecutor: ScopedExecutor
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        binding = ActivityMainBinding.inflate(layoutInflater)
-        setContentView(binding.root)
-
-        val adapter = BaseAdapter<String>()
-        adapter.listOfItems = mutableListOf(
-            "This is the sample text about nothing.",
-            "This is the sample text about nothing.",
-            "This is the sample text about nothing.",
-            "This is the sample text about nothing.",
-            "This is the sample text about nothing.",
-            "This is the sample text about nothing.",
-            "This is the sample text about nothing.",
-            "This is the sample text about nothing.",
-            "This is the sample text about nothing.",
-            "This is the sample text about nothing.",
-            "This is the sample text about nothing.",
-            "This is the sample text about nothing.",
-            "This is the sample text about nothing.",
-            "This is the sample text about nothing.",
-            "This is the sample text about nothing.",
-            "This is the sample text about nothing.",
-            "This is the sample text about nothing.",
-            "This is the sample text about nothing.",
-            "This is the sample text about nothing.",
-            "This is the sample text about nothing.",
-            "This is the sample text about nothing.",
-            "This is the sample text about nothing.",
-            "This is the sample text about nothing.",
-            "This is the sample text about nothing.",
-            "This is the sample text about nothing.",
-            "This is the sample text about nothing.",
-            "This is the sample text about nothing.",
-            "This is the sample text about nothing.",
-            "This is the sample text about nothing.",
-            "This is the sample text about nothing.",
-            "This is the sample text about nothing.",
-            "This is the sample text about nothing.",
-            "This is the sample text about nothing.",
-            "This is the sample text about nothing.",
-            "This is the sample text about nothing.",
-            "This is the sample text about nothing.",
-            "This is the sample text about nothing.",
-            "This is the sample text about nothing.",
-            "This is the sample text about nothing.",
-            "This is the sample text about nothing.",
-            "This is the sample text about nothing.",
-            "This is the sample text about nothing.",
-            "This is the sample text about nothing.",
-            "This is the sample text about nothing.",
-            "This is the sample text about nothing.",
-            "This is the sample text about nothing.",
-            "This is the sample text about nothing."
-        )
-
-        adapter.expressionViewHolderBinding = { eachItem, viewBinding ->
-            val view = viewBinding as RecyclerItemBinding
-            view.textview.text = eachItem
-            view.root.setOnClickListener {}
-            view.main.setOnClickListener {
-                val snackbar = Snackbar.make(view.main, "Main card", Snackbar.LENGTH_SHORT)
-                snackbar.show()
-            }
-            view.root.setOnTouchListener(
-                DragExperimentTouchListener(binding.recycler, view.textview.pivotX, view.textview, view.main)
-            )
+        viewBinding = ActivityMainBinding.inflate(layoutInflater)
+        setContentView(viewBinding.root)
 
 
+        // Initialize our background executor
+        cameraExecutor = Executors.newSingleThreadExecutor()
+        scopedExecutor = ScopedExecutor(cameraExecutor)
+
+        // Request camera permissions
+        if (allPermissionsGranted()) {
+            startCamera()
+        } else {
+            requestPermissions()
         }
-        adapter.expressionOnCreateViewHolder = { viewGroup ->
-            RecyclerItemBinding.inflate(LayoutInflater.from(viewGroup.context), viewGroup, false)
-        }
-        binding.recycler.layoutManager = LinearLayoutManager(this)
-        binding.recycler.adapter = adapter
 
-//
-//        Handler().postDelayed({
-//            animateButton()
-//        }, 1000)
+        // Set up the listeners for take photo and video capture buttons
+        viewBinding.imageCaptureButton.setOnClickListener { takePhoto() }
+        viewBinding.videoCaptureButton.setOnClickListener { captureVideo() }
+
     }
 
 
-    private fun animateButton() {
-        val viewHolder = binding.recycler.findViewHolderForAdapterPosition(0)
-        val main = viewHolder?.itemView?.findViewById<TextView>(R.id.main)
-        val textView = viewHolder?.itemView?.findViewById<TextView>(R.id.textview)
 
-        val x = (-80).dp.toFloat()
-        val openAnimator = ObjectAnimator.ofFloat(textView, "translationX", x)
-        openAnimator.duration = 800
-        openAnimator.addUpdateListener { animation: ValueAnimator ->
-            textView!!.translationX = (animation.animatedValue as Float)
-            main!!.translationX = animation.animatedValue as Float / 2 + 40.dp
-        }
-        openAnimator.interpolator = BounceInterpolator()
+    private fun takePhoto() {}
+
+    private fun captureVideo() {}
+
+    private fun startCamera() {
+        val cameraProviderFuture = ProcessCameraProvider.getInstance(this)
+
+        cameraProviderFuture.addListener({
+            // Used to bind the lifecycle of cameras to the lifecycle owner
+            val cameraProvider: ProcessCameraProvider = cameraProviderFuture.get()
+
+            val metrics = DisplayMetrics().also { viewBinding.viewFinder.display.getRealMetrics(it) }
+            Log.d(TAG, "Screen metrics: ${metrics.widthPixels} x ${metrics.heightPixels}")
+
+            val screenAspectRatio = aspectRatio(metrics.widthPixels, metrics.heightPixels)
+            Log.d(TAG, "Preview aspect ratio: $screenAspectRatio")
+
+            val rotation = viewBinding.viewFinder.display.rotation
 
 
-        val closeAnimator = ObjectAnimator.ofFloat(textView, "translationX", 0f)
-        closeAnimator.duration = 800
-        closeAnimator.addUpdateListener { animation: ValueAnimator ->
-            textView!!.translationX = (animation.animatedValue as Float)
-            main!!.translationX = animation.animatedValue as Float / 2 + 40.dp
-        }
-        closeAnimator.interpolator = BounceInterpolator()
+            // Preview
+            val preview = Preview.Builder()
+                .setTargetAspectRatio(screenAspectRatio)
+                .setTargetRotation(rotation)
+                .build()
+                .also {
+                    it.setSurfaceProvider(viewBinding.viewFinder.surfaceProvider)
+                }
 
-        openAnimator.addListener(object : AnimatorListenerAdapter() {
-            override fun onAnimationEnd(animation: Animator?) {
-                closeAnimator.start()
+            imageAnalyzer = ImageAnalysis.Builder()
+                // We request aspect ratio but no resolution
+                 .setTargetAspectRatio(screenAspectRatio)
+                 .setTargetRotation(rotation)
+                .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                .build()
+                .also {
+                    it.setAnalyzer(
+                        scopedExecutor, TextAnalyzer(
+                            this,
+                            lifecycle,
+                            viewModel.imageCropPercentages
+                        ) { result ->
+                            Log.d("note pan", result)
+                        }
+                    )
+                }
+
+            // Select back camera as a default
+            val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
+
+            try {
+                cameraProvider.unbindAll()
+                cameraProvider.bindToLifecycle(
+                    this, cameraSelector, preview, imageAnalyzer
+                )
+            } catch (exc: Exception) {
+                Log.e(TAG, "Use case binding failed", exc)
             }
-        })
 
-
-        openAnimator.start()
+        }, ContextCompat.getMainExecutor(this))
     }
 
+    private fun aspectRatio(width: Int, height: Int): Int {
+        val previewRatio = ln(max(width, height).toDouble() / min(width, height))
+        if (abs(previewRatio - ln(RATIO_4_3_VALUE))
+            <= abs(previewRatio - ln(RATIO_16_9_VALUE))
+        ) {
+            return AspectRatio.RATIO_4_3
+        }
+        return AspectRatio.RATIO_16_9
+    }
 
+    private fun requestPermissions() {
+        activityResultLauncher.launch(REQUIRED_PERMISSIONS)
+    }
+
+    private fun allPermissionsGranted() = REQUIRED_PERMISSIONS.all {
+        ContextCompat.checkSelfPermission(
+            baseContext, it
+        ) == PackageManager.PERMISSION_GRANTED
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        cameraExecutor.shutdown()
+        scopedExecutor.shutdown()
+    }
+
+    companion object {
+        // We only need to analyze the part of the image that has text, so we set crop percentages
+        // to avoid analyze the entire image from the live camera feed.
+        const val DESIRED_WIDTH_CROP_PERCENT = 8
+        const val DESIRED_HEIGHT_CROP_PERCENT = 50
+
+        // This is an arbitrary number we are using to keep tab of the permission
+        // request. Where an app has multiple context for requesting permission,
+        // this can help differentiate the different contexts
+        private const val REQUEST_CODE_PERMISSIONS = 10
+        private const val RATIO_4_3_VALUE = 4.0 / 3.0
+        private const val RATIO_16_9_VALUE = 16.0 / 9.0
+
+        private const val TAG = "note"
+        private val REQUIRED_PERMISSIONS =
+            mutableListOf(
+                Manifest.permission.CAMERA,
+                Manifest.permission.RECORD_AUDIO
+            ).apply {
+                if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P) {
+                    add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                }
+            }.toTypedArray()
+    }
 }
-
-
-//
-//
-//import android.graphics.Canvas
-//import androidx.appcompat.app.AppCompatActivity
-//import android.os.Bundle
-//import android.os.Handler
-//import android.view.LayoutInflater
-//import android.view.View
-//import android.view.ViewGroup
-//import android.view.animation.AccelerateInterpolator
-//import android.view.animation.AlphaAnimation
-//import android.view.animation.Animation
-//import android.view.animation.AnimationSet
-//import android.view.animation.TranslateAnimation
-//import android.widget.Button
-//import android.widget.TextView
-//import androidx.recyclerview.widget.ItemTouchHelper
-//import androidx.recyclerview.widget.LinearLayoutManager
-//import androidx.recyclerview.widget.RecyclerView
-//
-//class MainActivity : AppCompatActivity() {
-//
-//    private lateinit var recyclerView: RecyclerView
-//    private lateinit var itemTouchHelper: ItemTouchHelper
-//    private lateinit var adapter: MyAdapter
-//
-//    override fun onCreate(savedInstanceState: Bundle?) {
-//        super.onCreate(savedInstanceState)
-//        setContentView(R.layout.activity_main)
-//
-//        recyclerView = findViewById(R.id.recycler)
-//        recyclerView.layoutManager = LinearLayoutManager(this)
-//
-//        adapter = MyAdapter(listOf("Item 1", "Item 2", "Item 3"))
-//        recyclerView.adapter = adapter
-//
-//        itemTouchHelper = ItemTouchHelper(object : ItemTouchHelper.SimpleCallback(0, ItemTouchHelper.LEFT) {
-//            override fun onMove(recyclerView: RecyclerView, viewHolder: RecyclerView.ViewHolder, target: RecyclerView.ViewHolder): Boolean {
-//                return false
-//            }
-//
-//            override fun onSwiped(viewHolder: RecyclerView.ViewHolder, direction: Int) {
-//              //  adapter.removeItem(viewHolder.adapterPosition)
-//            }
-//
-//            override fun onChildDraw(
-//                c: Canvas,
-//                recyclerView: RecyclerView,
-//                viewHolder: RecyclerView.ViewHolder,
-//                dX: Float,
-//                dY: Float,
-//                actionState: Int,
-//                isCurrentlyActive: Boolean
-//            ) {
-//                val itemView = viewHolder.itemView
-//                val deleteButton = viewHolder.itemView.findViewById<Button>(R.id.deleteButton)
-//                deleteButton.visibility = if (dX < 0) View.VISIBLE else View.INVISIBLE
-//                itemView.translationX = dX
-//
-//                super.onChildDraw(c, recyclerView, viewHolder, dX, dY, actionState, isCurrentlyActive)
-//            }
-//        })
-//
-//        itemTouchHelper.attachToRecyclerView(recyclerView)
-//
-//        // Animate the button after a delay of 2 seconds
-//        Handler().postDelayed({
-//            animateButton()
-//        }, 2000)
-//    }
-//
-//    private fun animateButton() {
-//        val viewHolder = recyclerView.findViewHolderForAdapterPosition(0)
-//        val deleteButton = viewHolder?.itemView?.findViewById<Button>(R.id.deleteButton)
-//        deleteButton?.let {
-//            val translationAnimation = TranslateAnimation(0f, -it.width.toFloat(), 0f, 0f)
-//            translationAnimation.duration = 500
-//            translationAnimation.interpolator = AccelerateInterpolator()
-//
-//            val alphaAnimation = AlphaAnimation(1f, 0f)
-//            alphaAnimation.duration = 500
-//
-//            val animationSet = AnimationSet(true)
-//            animationSet.addAnimation(translationAnimation)
-//            animationSet.addAnimation(alphaAnimation)
-//            animationSet.setAnimationListener(object : Animation.AnimationListener {
-//                override fun onAnimationStart(animation: Animation?) {}
-//
-//                override fun onAnimationEnd(animation: Animation?) {
-//                    // Hide the button after the animation is complete
-//                    deleteButton.visibility = View.INVISIBLE
-//                }
-//
-//                override fun onAnimationRepeat(animation: Animation?) {}
-//            })
-//
-//            it.startAnimation(animationSet)
-//        }
-//    }
-//}
