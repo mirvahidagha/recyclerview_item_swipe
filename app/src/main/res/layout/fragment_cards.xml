@@ -18,4 +18,16 @@
         app:layout_constraintTop_toTopOf="parent"
         tools:listitem="@layout/card_item" />
 
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/recyclerSecond"
+        android:layout_marginTop="16dp"
+        android:transitionName="cards"
+        android:layout_width="match_parent"
+        tools:listitem="@layout/list_item"
+        android:orientation="vertical"
+        app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
+        tools:itemCount="2"
+        android:layout_height="wrap_content"
+        app:layout_constraintTop_toBottomOf="@+id/recyclerView" />
+
 </androidx.constraintlayout.widget.ConstraintLayout>

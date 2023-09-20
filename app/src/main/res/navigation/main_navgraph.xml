@@ -9,7 +9,7 @@
         android:id="@+id/cardsFragment"
         android:name="com.bank.actionmode.CardsFragment"
         android:label="fragment_cards"
-        tools:layout="@layout/fragment_cards" >
+        tools:layout="@layout/fragment_cards">
         <action
             android:id="@+id/action_cardsFragment_to_cardFragment"
             app:destination="@id/cardFragment" />
@@ -18,10 +18,10 @@
         android:id="@+id/cardFragment"
         android:name="com.bank.actionmode.CardFragment"
         android:label="fragment_card"
-        tools:layout="@layout/fragment_card" >
+        tools:layout="@layout/fragment_card">
         <argument
-            android:name="cardKey"
-            app:argType="string"
-            app:nullable="true" />
+            android:name="position"
+            app:argType="integer" />
+
     </fragment>
 </navigation>
